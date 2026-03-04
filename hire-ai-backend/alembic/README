@@ -1,0 +1,8 @@
+Generic single-database configuration.
+
+### When you SHOULD NOT autogenerate
+**Avoid autogenerate if:**
+ - you renamed a column (Alembic might drop + recreate)
+ - you’re changing data types with existing data
+ - production DB has data you care about
+In those cases, edit the migration manually.

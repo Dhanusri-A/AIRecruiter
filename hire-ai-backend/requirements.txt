@@ -1,0 +1,52 @@
+fastapi==0.118.0
+uvicorn[standard]==0.37.0
+
+python-dotenv==1.1.1
+
+
+# AWS
+boto3==1.42.54
+
+# Database
+sqlalchemy==2.0.46
+alembic==1.18.4
+pymysql==1.1.1
+pydantic==2.11.9
+
+# Security
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+
+# Auth
+PyJWT==2.10.1
+httpx==0.28.1
+
+# Testing
+pytest==8.3.5
+# MySQL
+cryptography>=42.0.0
+
+# Email Validation
+email-validator>=2.0.0
+
+# API Calls
+requests==2.32.5
+
+# For Documents
+reportlab>=4.0.0
+pymupdf==1.23.5 # windows 11 py 3.12 pip 26.0.1
+fpdf==1.7.2
+pypdf==6.7.0
+python-pptx==1.0.2
+python-docx==1.2.0
+python-multipart==0.0.22
+json-repair==0.58.3
+
+# For OTP
+itsdangerous==2.2.0
+pydantic[email]==2.11.9
+
+# For Candidate Sourcing
+duckduckgo-search==8.1.1
+beautifulsoup4==4.14.3
+

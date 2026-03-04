@@ -1,0 +1,10 @@
+# env variables
+.env
+.env.example
+
+# env folder
+.venv 
+
+# cache
+**/__pycache__/
+*.py[cod]
