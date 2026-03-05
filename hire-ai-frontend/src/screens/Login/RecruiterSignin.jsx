@@ -183,7 +183,7 @@ const RecruiterSignIn = () => {
                 <span className="font-medium">Remember me</span>
               </label>
               <Link
-                to="#"
+                to="/forgot-password"
                 className="text-emerald-600 font-semibold hover:text-emerald-700"
               >
                 Forgot password?

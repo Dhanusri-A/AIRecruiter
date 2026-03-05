@@ -310,3 +310,33 @@ export const getQuestionVideoUrl = async (interviewId, questionIndex) => {
     handleError(error, "Failed to fetch video URL");
   }
 };
+
+// ────────────────────────────────────────────────
+// OTP & Password Reset
+// ────────────────────────────────────────────────
+export const sendOTP = async (email, purpose) => {
+  try {
+    const response = await api.post("/auth/send-otp", { email, purpose });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to send OTP" };
+  }
+};
+
+export const verifyOTP = async (email, otp, purpose) => {
+  try {
+    const response = await api.post("/auth/verify-otp", { email, otp, purpose });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Invalid or expired OTP" };
+  }
+};
+
+export const resetPassword = async (email, otp, new_password) => {
+  try {
+    const response = await api.post("/auth/reset-password", { email, otp, new_password });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to reset password" };
+  }
+};

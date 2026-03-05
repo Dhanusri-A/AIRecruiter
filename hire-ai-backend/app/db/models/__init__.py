@@ -11,6 +11,7 @@ from app.db.models.work_experience import WorkExperience
 from app.db.models.certification import Certification
 from app.db.models.interview import Interview
 from app.db.models.interview_recording import InterviewRecording
+from app.db.models.otp import OTP
 
 __all__ = [
     # Enums
@@ -25,4 +26,5 @@ __all__ = [
     "Certification",
     "Interview",
     "InterviewRecording",
+    "OTP",
 ]

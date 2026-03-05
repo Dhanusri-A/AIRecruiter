@@ -20,7 +20,7 @@ import CandidateSignIn from "./screens/Login/CandidateSignIn";
 import CandidateSignUp from "./screens/Signup/CandidateSignUp";
 
 // Recruiter Auth
-import RecruiterSignIn from "./screens/Login/RecruiterSignIn";
+import RecruiterSignIn from "./screens/Login/RecruiterSignin";
 import RecruiterSignUp from "./screens/Signup/RecruiterSignUp";
 
 // Landing
@@ -60,6 +60,7 @@ import RecruiterCandidateSourcing from "./screens/Recruiter/pages/RecruiterCandi
 
 import GoogleCallback from "./screens/Login/GoogleCallback";
 import MicrosoftCallback from "./screens/Login/MicrosoftCallback";
+import ForgotPassword from "./screens/Login/ForgotPassword";
 
 import VerifyEmail from "./screens/Login/VerifyEmail"
 
@@ -78,6 +79,7 @@ function AppRoutes() {
       {/* Recruiter Auth */}
       <Route path="/recruiter-signin" element={<RecruiterSignIn />} />
       <Route path="/recruiter-signup" element={<RecruiterSignUp />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* For Verify and Reset */}
       <Route path="/verify-email" element={<VerifyEmail />} />

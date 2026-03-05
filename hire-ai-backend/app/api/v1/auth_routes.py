@@ -2,24 +2,25 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from app.db.base import get_db
 from app.db.crud import UserCRUD
 from app.schemas.user import  UserCreate, UserLogin, UserResponse, UserUpdate, VerifyEmailRequest
-from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, create_email_verification_token, decode_access_token
+from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, create_email_verification_token, decode_access_token, hash_password
 from app.api.v1.deps import get_current_user
 
 
 from app.core import config
 import httpx
 import jwt 
-from app.db.models import UserRole
+from app.db.models import UserRole, OTP
 
 # For Email OTP
-from app.schemas.otp import SendOTPRequest, SendOTPResponse, VerifyOTPRequest, VerifyOTPResponse   
+from app.schemas.otp import SendOTPRequest, SendOTPResponse, VerifyOTPRequest, VerifyOTPResponse, ResetPasswordRequest   
 from app.services.email_sender import send_email, send_verification_email
 from app.core.security import generate_otp, create_signed_token, verify_signed_token
+from app.core.email import send_otp_email
 
 import os
 from dotenv import load_dotenv
@@ -353,3 +354,110 @@ async def microsoft_callback(code: str, db: Session = Depends(get_db)):
     except Exception as e:
         error_url = f"{FRONTEND_URL}/recruiter-signin?error={str(e)}"
         return RedirectResponse(url=error_url)
+
+
+# OTP endpoints for password reset
+@router.post("/send-otp")
+async def send_otp_db(request: SendOTPRequest, db: Session = Depends(get_db)):
+    """Send OTP to email."""
+    if request.purpose == "reset_password":
+        user = UserCRUD.get_user_by_email(db, request.email)
+        if not user:
+            raise HTTPException(status_code=404, detail="Email not found")
+    elif request.purpose == "signup":
+        user = UserCRUD.get_user_by_email(db, request.email)
+        if user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+    
+    existing_otp = db.query(OTP).filter(
+        OTP.email == request.email,
+        OTP.purpose == request.purpose
+    ).first()
+    
+    if existing_otp:
+        if existing_otp.resend_count >= 2:
+            time_since_creation = (datetime.utcnow() - existing_otp.created_at).total_seconds()
+            if time_since_creation < 600:
+                wait_time = int(600 - time_since_creation)
+                raise HTTPException(status_code=429, detail=f"Maximum resend limit reached. Please try again after {wait_time} seconds")
+            else:
+                db.delete(existing_otp)
+                db.commit()
+                existing_otp = None
+    
+    otp_code = generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=1)
+    
+    if existing_otp:
+        existing_otp.otp = otp_code
+        existing_otp.expires_at = expires_at
+        existing_otp.resend_count += 1
+        existing_otp.is_verified = False
+    else:
+        db_otp = OTP(
+            email=request.email,
+            otp=otp_code,
+            purpose=request.purpose,
+            expires_at=expires_at
+        )
+        db.add(db_otp)
+    
+    db.commit()
+    
+    try:
+        await send_otp_email(request.email, otp_code, request.purpose)
+    except Exception as e:
+        pass
+    
+    remaining = 2 - (existing_otp.resend_count if existing_otp else 0)
+    return {"message": "OTP sent successfully", "resends_remaining": remaining}
+
+
+@router.post("/verify-otp")
+async def verify_otp_db(request: VerifyOTPRequest, db: Session = Depends(get_db)):
+    """Verify OTP."""
+    otp_record = db.query(OTP).filter(
+        OTP.email == request.email,
+        OTP.purpose == request.purpose,
+        OTP.is_verified == False
+    ).first()
+    
+    if not otp_record:
+        raise HTTPException(status_code=400, detail="Invalid OTP or OTP already used")
+    
+    if datetime.utcnow() > otp_record.expires_at:
+        raise HTTPException(status_code=400, detail="OTP expired")
+    
+    if otp_record.otp != request.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    
+    otp_record.is_verified = True
+    db.commit()
+    
+    return {"message": "OTP verified successfully"}
+
+
+@router.post("/reset-password")
+async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password using verified OTP."""
+    otp_record = db.query(OTP).filter(
+        OTP.email == request.email,
+        OTP.otp == request.otp,
+        OTP.purpose == "reset_password",
+        OTP.is_verified == True
+    ).first()
+    
+    if not otp_record:
+        raise HTTPException(status_code=400, detail="OTP not verified")
+    
+    user = UserCRUD.get_user_by_email(db, request.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.hashed_password = hash_password(request.new_password)
+    db.commit()
+    
+    db.delete(otp_record)
+    db.commit()
+    
+    return {"message": "Password reset successfully"}
