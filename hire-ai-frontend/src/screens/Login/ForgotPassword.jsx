@@ -14,7 +14,7 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  const [resendsRemaining, setResendsRemaining] = useState(2);
+  const [resendsRemaining, setResendsRemaining] = useState(4);
 
   useEffect(() => {
     let interval;

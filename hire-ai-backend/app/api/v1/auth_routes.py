@@ -7,7 +7,7 @@ from datetime import timedelta, datetime
 from app.db.base import get_db
 from app.db.crud import UserCRUD
 from app.schemas.user import  UserCreate, UserLogin, UserResponse, UserUpdate, VerifyEmailRequest
-from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, create_email_verification_token, decode_access_token, hash_password
+from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, create_email_verification_token, decode_access_token, hash_password, hash_otp, verify_otp_hash
 from app.api.v1.deps import get_current_user
 
 
@@ -375,7 +375,7 @@ async def send_otp_db(request: SendOTPRequest, db: Session = Depends(get_db)):
     ).first()
     
     if existing_otp:
-        if existing_otp.resend_count >= 2:
+        if existing_otp.resend_count >= 4:
             time_since_creation = (datetime.utcnow() - existing_otp.created_at).total_seconds()
             if time_since_creation < 600:
                 wait_time = int(600 - time_since_creation)
@@ -386,17 +386,18 @@ async def send_otp_db(request: SendOTPRequest, db: Session = Depends(get_db)):
                 existing_otp = None
     
     otp_code = generate_otp()
+    hashed_otp = hash_otp(otp_code)
     expires_at = datetime.utcnow() + timedelta(minutes=1)
     
     if existing_otp:
-        existing_otp.otp = otp_code
+        existing_otp.otp = hashed_otp
         existing_otp.expires_at = expires_at
         existing_otp.resend_count += 1
         existing_otp.is_verified = False
     else:
         db_otp = OTP(
             email=request.email,
-            otp=otp_code,
+            otp=hashed_otp,
             purpose=request.purpose,
             expires_at=expires_at
         )
@@ -409,7 +410,7 @@ async def send_otp_db(request: SendOTPRequest, db: Session = Depends(get_db)):
     except Exception as e:
         pass
     
-    remaining = 2 - (existing_otp.resend_count if existing_otp else 0)
+    remaining = 4 - (existing_otp.resend_count if existing_otp else 0)
     return {"message": "OTP sent successfully", "resends_remaining": remaining}
 
 
@@ -428,10 +429,10 @@ async def verify_otp_db(request: VerifyOTPRequest, db: Session = Depends(get_db)
     if datetime.utcnow() > otp_record.expires_at:
         raise HTTPException(status_code=400, detail="OTP expired")
     
-    if otp_record.otp != request.otp:
+    if not verify_otp_hash(request.otp, otp_record.otp):
         raise HTTPException(status_code=400, detail="Invalid OTP")
     
-    otp_record.is_verified = True
+    db.delete(otp_record)
     db.commit()
     
     return {"message": "OTP verified successfully"}
@@ -440,24 +441,11 @@ async def verify_otp_db(request: VerifyOTPRequest, db: Session = Depends(get_db)
 @router.post("/reset-password")
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     """Reset password using verified OTP."""
-    otp_record = db.query(OTP).filter(
-        OTP.email == request.email,
-        OTP.otp == request.otp,
-        OTP.purpose == "reset_password",
-        OTP.is_verified == True
-    ).first()
-    
-    if not otp_record:
-        raise HTTPException(status_code=400, detail="OTP not verified")
-    
     user = UserCRUD.get_user_by_email(db, request.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
     user.hashed_password = hash_password(request.new_password)
-    db.commit()
-    
-    db.delete(otp_record)
     db.commit()
     
     return {"message": "Password reset successfully"}

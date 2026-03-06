@@ -28,6 +28,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
+def hash_otp(otp: str) -> str:
+    """Hash an OTP using bcrypt."""
+    return pwd_context.hash(otp)
+
+
+def verify_otp_hash(plain_otp: str, hashed_otp: str) -> bool:
+    """Verify an OTP against its hash."""
+    return pwd_context.verify(plain_otp, hashed_otp)
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
     to_encode = data.copy()
