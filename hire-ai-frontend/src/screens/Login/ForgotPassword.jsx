@@ -14,7 +14,20 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  const [resendsRemaining, setResendsRemaining] = useState(4);
+  const [resendsRemaining, setResendsRemaining] = useState(1);
+  const [lockoutEnd, setLockoutEnd] = useState(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(`otp_lockout_${email}`);
+    if (stored) {
+      const lockoutTime = parseInt(stored);
+      if (Date.now() < lockoutTime) {
+        setLockoutEnd(lockoutTime);
+      } else {
+        localStorage.removeItem(`otp_lockout_${email}`);
+      }
+    }
+  }, [email]);
 
   useEffect(() => {
     let interval;
@@ -39,6 +52,12 @@ const ForgotPassword = () => {
       return;
     }
 
+    if (lockoutEnd && Date.now() < lockoutEnd) {
+      const hoursLeft = Math.ceil((lockoutEnd - Date.now()) / (1000 * 60 * 60));
+      toast.error(`Too many attempts. Try again in ${hoursLeft} hour(s)`);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await sendOTP(email, "reset_password");
@@ -50,6 +69,12 @@ const ForgotPassword = () => {
       setTimer(60);
       setCanResend(false);
     } catch (err) {
+      if (err.status === 429) {
+        const lockout = Date.now() + 24 * 60 * 60 * 1000;
+        localStorage.setItem(`otp_lockout_${email}`, lockout.toString());
+        setLockoutEnd(lockout);
+        setStep(1);
+      }
       toast.error(err.detail || err.message || "Failed to send OTP");
     } finally {
       setLoading(false);
@@ -107,110 +132,129 @@ const ForgotPassword = () => {
             Reset Password
           </h2>
           <p className="text-gray-500 text-center mb-8 text-sm">
-            {step === 1 && "Enter your email to receive OTP"}
-            {step === 2 && "Enter the OTP sent to your email"}
-            {step === 3 && "Create a new password"}
+            {lockoutEnd && Date.now() < lockoutEnd ? "Account temporarily locked" : (
+              step === 1 ? "Enter your email to receive OTP" :
+              step === 2 ? "Enter the OTP sent to your email" :
+              "Create a new password"
+            )}
           </p>
 
-          {step === 1 && (
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 mb-2 block">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                    <Mail size={18} />
-                  </span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full border-2 border-gray-200 rounded-xl py-3.5 pl-12 pr-4 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
-                    placeholder="you@company.com"
-                  />
-                </div>
+          {lockoutEnd && Date.now() < lockoutEnd ? (
+            <div className="text-center py-8">
+              <div className="text-red-600 mb-4">
+                <Lock size={48} className="mx-auto mb-3" />
+                <h3 className="text-xl font-semibold">Account Locked</h3>
               </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-60 shadow-lg transition-all"
-              >
-                {loading ? "Sending..." : "Send OTP"}
-              </button>
-            </form>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 mb-4 block text-center">
-                  Enter 6-digit OTP
-                </label>
-                <OTPInput length={6} onComplete={handleVerifyOTP} disabled={loading} />
-                
-                <div className="mt-4 text-center">
-                  <p className="text-sm text-gray-600">
-                    {timer > 0 ? (
-                      <span className="font-semibold text-emerald-600">
-                        Time remaining: {timer}s
-                      </span>
-                    ) : (
-                      <span className="font-semibold text-red-600">
-                        OTP expired
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {resendsRemaining > 0 ? `${resendsRemaining} resend(s) remaining` : "No resends remaining"}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => handleSendOTP({ preventDefault: () => {} })}
-                disabled={loading || !canResend || resendsRemaining === 0}
-                className="w-full text-sm text-emerald-600 hover:text-emerald-700 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
-              >
-                {canResend ? "Resend OTP" : `Resend OTP (${timer}s)`}
-              </button>
+              <p className="text-gray-600 mb-2">
+                Too many password reset attempts for <strong>{email}</strong>
+              </p>
+              <p className="text-sm text-gray-500">
+                Please try again in <strong>{Math.ceil((lockoutEnd - Date.now()) / (1000 * 60 * 60))} hour(s)</strong>
+              </p>
             </div>
-          )}
+          ) : (
+            <>
+              {step === 1 && (
+                <form onSubmit={handleSendOTP} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-2 block">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                        <Mail size={18} />
+                      </span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="w-full border-2 border-gray-200 rounded-xl py-3.5 pl-12 pr-4 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
+                        placeholder="you@company.com"
+                      />
+                    </div>
+                  </div>
 
-          {step === 3 && (
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 mb-2 block">
-                  New Password
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                    <Lock size={18} />
-                  </span>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    className="w-full border-2 border-gray-200 rounded-xl py-3.5 pl-12 pr-4 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
-                    placeholder="••••••••"
-                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-60 shadow-lg transition-all"
+                  >
+                    {loading ? "Sending..." : "Send OTP"}
+                  </button>
+                </form>
+              )}
+
+              {step === 2 && (
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-4 block text-center">
+                      Enter 6-digit OTP
+                    </label>
+                    <OTPInput length={6} onComplete={handleVerifyOTP} disabled={loading} />
+                    
+                    <div className="mt-4 text-center">
+                      <p className="text-sm text-gray-600">
+                        {timer > 0 ? (
+                          <span className="font-semibold text-emerald-600">
+                            Time remaining: {timer}s
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-red-600">
+                            OTP expired
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {resendsRemaining > 0 ? `${resendsRemaining} resend(s) remaining` : "No resends remaining"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleSendOTP({ preventDefault: () => {} })}
+                    disabled={loading || !canResend || resendsRemaining === 0}
+                    className="w-full text-sm text-emerald-600 hover:text-emerald-700 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {resendsRemaining === 0 ? "No resends remaining" : canResend ? "Resend OTP" : `Resend OTP (${timer}s)`}
+                  </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Must be at least 8 characters
-                </p>
-              </div>
+              )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-60 shadow-lg transition-all"
-              >
-                {loading ? "Resetting..." : "Reset Password"}
-              </button>
-            </form>
+              {step === 3 && (
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-2 block">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                        <Lock size={18} />
+                      </span>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        className="w-full border-2 border-gray-200 rounded-xl py-3.5 pl-12 pr-4 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Must be at least 8 characters
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-60 shadow-lg transition-all"
+                  >
+                    {loading ? "Resetting..." : "Reset Password"}
+                  </button>
+                </form>
+              )}
+            </>
           )}
         </div>
       </div>

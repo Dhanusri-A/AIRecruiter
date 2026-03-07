@@ -375,11 +375,11 @@ async def send_otp_db(request: SendOTPRequest, db: Session = Depends(get_db)):
     ).first()
     
     if existing_otp:
-        if existing_otp.resend_count >= 4:
+        if existing_otp.resend_count >= 1:
             time_since_creation = (datetime.utcnow() - existing_otp.created_at).total_seconds()
-            if time_since_creation < 600:
-                wait_time = int(600 - time_since_creation)
-                raise HTTPException(status_code=429, detail=f"Maximum resend limit reached. Please try again after {wait_time} seconds")
+            if time_since_creation < 86400:
+                wait_time = int((86400 - time_since_creation) / 3600)
+                raise HTTPException(status_code=429, detail=f"Maximum resend limit reached. Please try again after {wait_time} hours")
             else:
                 db.delete(existing_otp)
                 db.commit()
@@ -410,7 +410,7 @@ async def send_otp_db(request: SendOTPRequest, db: Session = Depends(get_db)):
     except Exception as e:
         pass
     
-    remaining = 4 - (existing_otp.resend_count if existing_otp else 0)
+    remaining = 1 - (existing_otp.resend_count if existing_otp else 0)
     return {"message": "OTP sent successfully", "resends_remaining": remaining}
 
 
